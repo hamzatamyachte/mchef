@@ -46,11 +46,12 @@ class RecipeParser extends AbstractService {
             }
         }
 
-        $validPHPVersions = (PHPVersions::instance())->listVersions();
-        if (!in_array($object->phpVersion, $validPHPVersions)) {
-            $supported = implode(', ', $validPHPVersions);
-            throw new Exception("Unsupported php version $object->phpVersion - supported versions are $supported");
-        }
+        // TODO re-enable this when we have a list of supported PHP versions - Hamza
+        //$validPHPVersions = (PHPVersions::instance())->listVersions();
+        //if (!in_array($object->phpVersion, $validPHPVersions)) {
+        //    $supported = implode(', ', $validPHPVersions);
+        //    throw new Exception("Unsupported php version $object->phpVersion - supported versions are $supported");
+        //}
     }
 
     private function setDefaults(Recipe $recipe) {
