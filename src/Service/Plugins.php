@@ -306,50 +306,48 @@ class Plugins extends AbstractService {
 
             [$repo, $repoBranch] = $this->extractRepoInfoFromPlugin($plugin);
 
-            // Only support single github hosted plugins for now.
-            if (strpos($repo, 'https://github.com') === 0) {
-                if ($recipe->cloneRepoPlugins) {
-                    $tmpDir = sys_get_temp_dir().'/'.uniqid('', true);
+            if ($recipe->cloneRepoPlugins) {
+                $tmpDir = sys_get_temp_dir().'/'.uniqid('', true);
 
-                    $this->cloneGithubRepository($repo, $repoBranch, $tmpDir);
-                    $versionFiles = $this->findMoodleVersionFiles($tmpDir);
-                    if (count($versionFiles) === 1) {
-                        // Repository is a single plugin.
-                        if (file_exists($tmpDir.'/version.php')) {
-                            $pluginName = $this->getPluginComponentFromVersionFile($tmpDir.'/version.php');
-                            $pluginPath = $this->getMoodlePluginPath($pluginName);
-                            $targetPath = str_replace('//', '/', getcwd().'/'.$pluginPath);
-                            if (!file_exists($targetPath.'/version.php')) {
-                                $this->cli->info('Moving plugin from temp folder to ' . $targetPath);
-                                if (!file_exists($targetPath)) {
-                                    mkdir($targetPath, 0755, true);
-                                }
-                                rename($tmpDir, $targetPath);
-                            } else {
-                                $this->cli->info('Skipping copying '.$pluginName.' as already present at '.$targetPath);
-                                // Plugin already present locally.
-                                File::instance()->deleteDir($tmpDir);
+                $this->cloneGithubRepository($repo, $repoBranch, $tmpDir);
+                $versionFiles = $this->findMoodleVersionFiles($tmpDir);
+                if (count($versionFiles) === 1) {
+                    // Repository is a single plugin.
+                    if (file_exists($tmpDir.'/version.php')) {
+                        $pluginName = $this->getPluginComponentFromVersionFile($tmpDir.'/version.php');
+                        $pluginPath = $this->getMoodlePluginPath($pluginName);
+                        $targetPath = str_replace('//', '/', getcwd().'/'.$pluginPath);
+                        if (!file_exists($targetPath.'/version.php')) {
+                            $this->cli->info('Moving plugin from temp folder to ' . $targetPath);
+                            if (!file_exists($targetPath)) {
+                                mkdir($targetPath, 0755, true);
                             }
-                            $volume = new Volume(...['path' => $pluginPath, 'hostPath' => $targetPath]);
-                            $volumes[] = $volume;
-                            $plugins[$pluginName] = new Plugin(
-                                $pluginName,
-                                $pluginPath,
-                                $targetPath,
-                                $volume,
-                                $plugin
-                            );
+                            rename($tmpDir, $targetPath);
+                        } else {
+                            $this->cli->info('Skipping copying '.$pluginName.' as already present at '.$targetPath);
+                            // Plugin already present locally.
+                            File::instance()->deleteDir($tmpDir);
                         }
-                    } else {
-                        // TODO - support plugins already in a structure.
-
-                        $this->cli->info('The Moodle plugin version information is not found in the repo.');
-
-                        throw new Exception('Unhandled case');
+                        $volume = new Volume(...['path' => $pluginPath, 'hostPath' => $targetPath]);
+                        $volumes[] = $volume;
+                        $plugins[$pluginName] = new Plugin(
+                            $pluginName,
+                            $pluginPath,
+                            $targetPath,
+                            $volume,
+                            $plugin
+                        );
                     }
+                } else {
+                    // TODO - support plugins already in a structure.
+
+                    $this->cli->info('The Moodle plugin version information is not found in the repo.');
+
+                    throw new Exception('Unhandled case');
                 }
             }
         }
+
         // Cache to file.
         $mainService = (Main::instance($this->cli));
         $chefPath = $mainService->getChefPath();
