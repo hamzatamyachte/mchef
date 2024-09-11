@@ -17,6 +17,10 @@ class Main extends AbstractService {
      * @var Recipe
      */
     private $recipe;
+    /**
+     * @var Recipe
+     */
+    private $dockerService;
 
     /**
      * @var Plugins plugins service
@@ -202,10 +206,43 @@ class Main extends AbstractService {
             --fullname=\"$fullname\" --shortname=\"$shortname\" --adminemail=\"$adminemail\" --agree-license 1>/dev/null";
 
             $moodleContainer = $this->getDockerMoodleContainerName();
+            $dbContainer = $this->getDockerDatabaseContainerName();
 
             $cmd = 'docker exec '.$moodleContainer.' php '.$installoptions;
 
-            $this->execPassthru($cmd);
+            // Try to install
+            try {
+
+                $this->execPassthru($cmd);
+            } catch (\Exception $e) {
+
+                // Installation failed, ask if DB should be dropped?
+                $this->cli->error($e->getMessage());
+
+                $this->cli->notice("Do you want to delete the db and install fresh? (yes/no): ");
+
+                $handleOverwrite = fopen("php://stdin","r");
+
+                $overwrite = fgets($handleOverwrite);
+
+                if (strtolower(trim($overwrite)) === 'yes') {
+
+                    $this->cli->notice('Overwriting the existing Moodle database...');
+
+                    // Drop all DB Tables in public
+                    $dbdeletecmd = 'docker exec ' . $dbContainer . ' psql -U ' . $recipe->dbUser . ' -d ' . $recipe->dbName . ' -c "DO \$\$ DECLARE row RECORD; BEGIN FOR row IN (SELECT tablename FROM pg_tables WHERE schemaname = \'public\') LOOP EXECUTE \'DROP TABLE IF EXISTS public.\' || quote_ident(row.tablename); END LOOP; END \$\$;"';
+
+                    exec($dbdeletecmd, $outpup, $return);
+
+                    // Do the installation again, should work now
+                    $this->execPassthru($cmd);
+
+                } else {
+                    $this->cli->notice('Skipping Moodle database installation.');
+                }
+
+                fclose($handleOverwrite);
+            }
 
             fclose($handle);
 
@@ -217,6 +254,14 @@ class Main extends AbstractService {
         fclose($handle);
     }
 
+    private function checkPortBinding(Recipe $recipe): bool {
+      $dockerService = Docker::instance($this->cli);
+
+      // TODO for now return true until we can figure out how to check for port binding.
+      return true;
+      // return $dockerService->checkPortAvailable($recipe->port);
+    }
+    
     private function updateHostHosts(Recipe $recipe): void {
         if ($recipe->updateHostHosts) {
             try {
@@ -340,7 +385,8 @@ class Main extends AbstractService {
             );
         }
         $recipe = $this->parseRecipe($recipeFilePath);
-
+        $this->checkPortBinding($recipe) || die();
+        
         if ($recipe->includeBehat) {
             $behatDumpPath = getcwd().'/_behat_dump';
             if (!file_exists($behatDumpPath)) {
