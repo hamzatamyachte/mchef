@@ -50,6 +50,13 @@ class Recipe extends AbstractModel {
         public bool $cloneRepoPlugins = false,
 
         /**
+         * @var ?object - site object.
+         */
+        public ?object $site = null,
+
+        public ?object $admin = null,
+
+        /**
          * @var string - web host (leave blank for default of localhost).
          */
         public ?string $host = null,
