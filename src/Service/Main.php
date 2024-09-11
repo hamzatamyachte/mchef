@@ -63,9 +63,11 @@ class Main extends AbstractService {
     }
 
     private function startDocker($ymlPath) {
+
         $this->cli->notice('Starting docker containers');
+
         // @Todo - force-recreate and --build need to be flags that get passed in, not hard coded.
-        $cmd = "docker compose -f $ymlPath up -d --force-recreate --build";
+        $cmd = "docker compose -f $ymlPath up -d --force-recreate --build  1>/dev/null";
         $this->execPassthru($cmd, "Error starting docker containers - try pruning with 'docker builder prune' OR 'docker system prune' (note 'docker system prune' will destroy all non running container images)");
 
         // @Todo - Add code here to check docker ps for expected running containers.
@@ -158,21 +160,61 @@ class Main extends AbstractService {
                 if ($returnVar === 0) {
                     $dbnotready = false;
                 }
-                $this->cli->notice('Waiting for db to be ready');
+                $this->cli->notice('Waiting for the database to be ready...');
+
                 sleep(1);
             }
-            $this->cli->notice('DB ready!');
 
-            // TODO check if DB exist already and ask if we schould overwrite
-
-            $this->cli->notice('Installing DB');
-            $installoptions = '/var/www/html/moodle/admin/cli/install_database.php --lang=de --adminpass=123456 --adminemail=admin@example.com --agree-license --fullname=mchefMOODLE --shortname=mchefMOODLE';
-            $cmd = 'docker exec '.$moodleContainer.' php '.$installoptions;
-            $this->execPassthru($cmd);
+            $this->installMoodleDatabase($recipe);
         }
 
         // Print out wwwroot
         $this->cli->notice('Installation finished. Your mchef-Moodle is now available at: ' . $recipe->wwwRoot );
+    }
+
+    /**
+     * Install the moodle database using the recipe.
+     *
+     * @param Recipe $recipe
+     *
+     * @return void
+     */
+    private function installMoodleDatabase(Recipe $recipe): void {
+
+        $dbType = $recipe->dbType ?? 'pgsql';
+        $fullname = $recipe->site->fullname ?? 'Moodle Site';
+        $shortname = $recipe->site->shortname ?? 'Moodle';
+        $adminemail = $recipe->admin->email ?? 'moodle@example.com';
+        $adminpass = $recipe->admin->password ?? 'password';
+        $lang = $recipe->site->lang ?? 'en';
+
+        $this->cli->notice('Do you want to install the database? (yes/no) ');
+
+        $handle = fopen("php://stdin","r");
+
+        $line = fgets($handle);
+
+        if (trim($line) === 'yes') {
+
+            $this->cli->notice('Installing the database...');
+
+            $installoptions = "/var/www/html/moodle/admin/cli/install_database.php --lang=$lang --adminpass=$adminpass \
+            --fullname=\"$fullname\" --shortname=\"$shortname\" --adminemail=\"$adminemail\" --agree-license 1>/dev/null";
+
+            $moodleContainer = $this->getDockerMoodleContainerName();
+
+            $cmd = 'docker exec '.$moodleContainer.' php '.$installoptions;
+
+            $this->execPassthru($cmd);
+
+            fclose($handle);
+
+            return;
+        }
+
+        $this->cli->notice('Skipping the database installation');
+
+        fclose($handle);
     }
 
     private function updateHostHosts(Recipe $recipe): void {
